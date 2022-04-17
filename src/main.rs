@@ -33,7 +33,6 @@ use tui::{
 
 mod moostar;
 
-
 enum InputEditionMode {
     Normal,
     //Editing
@@ -92,6 +91,10 @@ impl App {
         self.runner.get_input()
     }
 
+    fn get_output(&self) -> &str {
+        self.runner.get_output()
+    }
+
     fn get_code(&self) -> &str {
         &self.code
     }
@@ -112,29 +115,38 @@ impl App {
         )
     }
 
-    fn get_coloured_code(&self) -> Text {
+    fn get_coloured_code(&self, wrap_length: u16) -> (Text, usize) {
         // Find out where to split
+        let wrap_length: usize = wrap_length.into();
         let mut colour_span: (usize, usize) = self.runner.get_instruction_span();
         let highlight_style = Style::default().fg(Color::Red).add_modifier(Modifier::BOLD);
         // Split the code into texts
         let mut spans: Vec<Spans> = Vec::new();
         let mut split_reached: bool = false;
-        for line in self.code.lines() {
+        let mut center_line: usize = 0;
+        for (current_line, line) in self.code.lines().enumerate() {
+            let len = line.len();
             // If the remainder of the line is more than the first split, ret
-            if colour_span.0 > line.len() {
+            if colour_span.0 > len {
+                // Change the wrap offset
+                center_line += if len > wrap_length {
+                    len.div_euclid(wrap_length) + if len % wrap_length == 0 { 0 } else { 1 }
+                } else { 0 };
                 colour_span.0 -= line.len() + 1;
                 spans.push(Spans::from(vec![Span::raw(line)]));
             } else if split_reached || self.runner.is_halted() {
                 spans.push(Spans::from(vec![Span::raw(line)]));
             } else {
                 //Split into parts
+                // This is the line
+                center_line += current_line + if colour_span.0 > wrap_length { colour_span.0.div_euclid(wrap_length) } else { 0 };
                 let (one, bet) = line.split_at(colour_span.0);
                 let (two, three) = bet.split_at(colour_span.1);
                 spans.push(Spans::from(vec![Span::raw(one), Span::styled(two, highlight_style), Span::raw(three)]));
                 split_reached = true;
             }
         }
-        Text::from(spans)
+        (Text::from(spans), center_line)
     }
 
     fn format_ribbon<'a>() -> Span<'a> {
@@ -207,6 +219,17 @@ impl App {
                 Frequency::Thousand => 1
             }
         )
+    }
+
+    fn get_wrapped_code_line_count(&self, size: u16) -> u16 {
+        let mut count: u16 = 0;
+        for line in self.code.lines() {
+            let len = line.len();
+            let rem = len.rem_euclid(size.into());
+            let add: u16 = (len.div_euclid(size.into()) + if rem > 0 { 1 } else { 0 }).try_into().unwrap();
+            count += add;
+        }
+        count
     }
 }
 
@@ -320,6 +343,10 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
         .y_bounds([0.0, 100.0]);
     f.render_widget(canvas_block, chunks[0]);
 
+    let io_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(chunks[1]);
     let input_block = Paragraph::new(app.get_input())
         .block(Block::default()
             .borders(Borders::ALL)
@@ -329,7 +356,17 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
             .border_type(BorderType::Plain))
         .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
         .alignment(Alignment::Left);
-    f.render_widget(input_block, chunks[1]);
+    f.render_widget(input_block, io_layout[0]);
+
+    let output_block = Paragraph::new(app.get_output())
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::reset())
+            .title(Span::styled("Output", Style::default().fg(Color::Red).add_modifier(Modifier::ITALIC)))
+            .title_alignment(Alignment::Right))
+        .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+        .alignment(Alignment::Left);
+    f.render_widget(output_block, io_layout[1]);
 
     let detail_chunks = Layout::default()
         .direction(Direction::Horizontal)
@@ -344,11 +381,16 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
             .title_alignment(Alignment::Center));
     f.render_widget(jump_block, detail_chunks[0]);
 
-    let code_block = Paragraph::new(app.get_coloured_code())
+    let (text, center_line) = app.get_coloured_code(detail_chunks[1].width - 2);
+    let center_line: u16 = center_line.try_into().unwrap();
+    let linecount: u16 = app.get_wrapped_code_line_count(detail_chunks[1].width - 2).try_into().unwrap();
+    let scroll = center_line.checked_sub((detail_chunks[1].height-2)/2).unwrap_or(0).min(linecount.checked_sub(detail_chunks[1].height-2).unwrap_or(0));
+    let code_block = Paragraph::new(text)
         .block(Block::default()
             .borders(Borders::ALL)
             .title("-::[Code]::-")
             .title_alignment(Alignment::Center))
+        .scroll((scroll, 0))
         .wrap(Wrap { trim: false });
     f.render_widget(code_block, detail_chunks[1]);
 

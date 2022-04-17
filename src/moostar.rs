@@ -225,6 +225,10 @@ impl Runner {
         &self.input
     }
 
+    pub fn get_output(&self) -> &str {
+        &self.output
+    }
+
     pub fn jump_list(&self, max_of: Option<usize>) -> Vec<usize> {
         self.return_positions
             .iter()
