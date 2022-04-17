@@ -14,10 +14,12 @@ use tui::{
     backend::{Backend, CrosstermBackend},
     layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
-    text::Span,
-    widgets::{Block, BorderType, Borders, canvas::{Canvas, Line, Rectangle}, List, ListItem, ListState, Paragraph},
+    text::{Span, Spans, Text},
+    widgets::{Block, BorderType, Borders, canvas::{Canvas, Line, Rectangle}, List, ListItem, ListState, Paragraph, Wrap},
     Frame, Terminal
 };
+
+mod moostar;
 
 enum InputEditionMode {
     Normal,
@@ -40,17 +42,12 @@ enum Frequency {
 }
 
 struct App {
-    /// Current input buffer
-    input: String,
-    /// Loaded program content
-    program: String,
+    /// Runner
+    runner: moostar::Runner,
+    /// Keep a separate, original version of the code here
+    code: String,
     /// Input Edition Mode
     edition_mode: InputEditionMode,
-    /// Stack of iteration/call return pointers
-    return_positions: Vec<usize>,
-    /// Ribbons
-    data_ribbon: std::collections::HashMap<usize, u8>,
-    meta_ribbon: std::collections::HashMap<usize, u8>,
     /// The Frequency we are set at
     frequency: Frequency,
     /// Running
@@ -59,29 +56,71 @@ struct App {
     funny_number: u16
 }
 
-impl Default for App {
-    fn default() -> App {
-        App {
-            input: "my input something something something something something something something something something something something something something something something something something".into(),//String::new(),
-            program: ">+++>+[-<+>]".into(),//String::new(),
+impl App {
+    fn new(path: &str) -> Result<App, Box<dyn Error>> {
+        let vecbytes: Vec<u8> = std::fs::read(path)?;
+        let decoded: String = String::from_utf8(vecbytes)?;
+        Ok(App {
+            runner: moostar::Runner::new(&decoded)?,
+            code: decoded + " ", // That space serves for "halt"
             edition_mode: InputEditionMode::Normal,
-            return_positions: Vec::new(),
-            data_ribbon: std::collections::HashMap::new(),
-            meta_ribbon: std::collections::HashMap::new(),
             frequency: Frequency::OneHz,
             running: false,
             funny_number: 0
-        }
+        })
     }
-}
 
-impl App {
+    fn step(&mut self) -> () {
+        self.runner.step();
+    }
+
     fn get_input(&self) -> &str {
-        &self.input
+        &self.runner.get_input()
     }
 
     fn get_code(&self) -> &str {
-        &self.program
+        &self.code
+    }
+
+    fn get_jumps(&self, max_of: Option<usize>) -> Text {
+        let style = Style::default()
+            .fg(Color::Green)
+            .add_modifier(Modifier::BOLD);
+        Text::from(
+            self.runner
+                .jump_list(max_of)
+                .iter()
+                .map(|pos| Spans::from(vec![
+                    Span::raw("Back to #"),
+                    Span::styled(pos.to_string(), style)
+                ]))
+                .collect::<Vec<Spans>>()
+        )
+    }
+
+    fn get_coloured_code(&self) -> Text {
+        // Find out where to split
+        let mut colour_span: (usize, usize) = self.runner.get_instruction_span();
+        let highlight_style = Style::default().fg(Color::Red).add_modifier(Modifier::BOLD);
+        // Split the code into texts
+        let mut spans: Vec<Spans> = Vec::new();
+        let mut split_reached: bool = false;
+        for line in self.code.lines() {
+            // If the remainder of the line is more than the first split, ret
+            if colour_span.0 > line.len() {
+                colour_span.0 -= line.len() + 1;
+                spans.push(Spans::from(vec![Span::raw(line)]));
+            } else if split_reached || self.runner.is_halted() {
+                spans.push(Spans::from(vec![Span::raw(line)]));
+            } else {
+                //Split into parts
+                let (one, bet) = line.split_at(colour_span.0);
+                let (two, three) = bet.split_at(colour_span.1);
+                spans.push(Spans::from(vec![Span::raw(one), Span::styled(two, highlight_style), Span::raw(three)]));
+                split_reached = true;
+            }
+        }
+        Text::from(spans)
     }
 
     fn format_ribbon<'a>(&self) -> Span<'a> {
@@ -173,16 +212,19 @@ fn disable_terminal<B: Backend + std::io::Write>(mut terminal: Terminal<B>) -> R
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    // Fetch argument
+    let mut args = std::env::args();
+    if args.len() < 2 {
+        eprintln!("Provide a file path please");
+        return Ok(());
+    }
     // Set it up
     let mut terminal = init_terminal()?;
-    let app = App::default();
+    let app = App::new(&args.nth(1).unwrap())?;
     let res = run_app(&mut terminal, app);
 
-    disable_terminal(terminal)?;
     // restore it
-    //disable_raw_mode()?;
-    //execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
-    //terminal.show_cursor()?;
+    disable_terminal(terminal)?;
 
     if let Err(err) = res {
         eprintln!("Shoot!\n{:?}", err)
@@ -208,6 +250,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
                     KeyCode::Up => app.decrease_frequency(),
                     KeyCode::Down => app.increase_frequency(),
                     KeyCode::Char(' ') => app.running = !app.running,
+                    KeyCode::Char('s') => { app.running = false; app.step(); }
                     _ => {}
                 }
             }
@@ -223,6 +266,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
             last_tick = Instant::now() - Duration::from_millis(rem as u64);
             // Do the ticks
             if app.running {
+                (0..num_of_ticks).for_each(|_| app.step());
                 app.funny_number = app.funny_number.wrapping_add(num_of_ticks as u16);    
             }
         }
@@ -279,22 +323,19 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
         .constraints([Constraint::Percentage(30), Constraint::Percentage(50), Constraint::Percentage(20)].as_ref())
         .split(chunks[2]);
 
-    let number_of_entries: u16 = app.funny_number;
-    let scroll = 0; //if number_of_entries > detail_chunks[0].height - 2 { detail_chunks[0].height - 2 } else { 0 };
-    //(detail_chunks[0].height - 2) - number_of_entries.checked_sub(detail_chunks[0].height - 2).unwrap_or(0);
-    let jump_block = Paragraph::new((number_of_entries.checked_sub(detail_chunks[0].height-2).unwrap_or(0)..number_of_entries).map(|x| format!("{}", x)).collect::<Vec<String>>().join("\n"))
+    let jump_block = Paragraph::new(app.get_jumps(Some((detail_chunks[0].height-2).into())))
         .block(Block::default()
             .borders(Borders::ALL)
             .title("-::[Jumps]::-")
-            .title_alignment(Alignment::Center))
-        .scroll((scroll, 0));
+            .title_alignment(Alignment::Center));
     f.render_widget(jump_block, detail_chunks[0]);
 
-    let code_block = Paragraph::new(app.get_code())
+    let code_block = Paragraph::new(app.get_coloured_code())
         .block(Block::default()
             .borders(Borders::ALL)
             .title("-::[Code]::-")
-            .title_alignment(Alignment::Center));
+            .title_alignment(Alignment::Center))
+        .wrap(Wrap { trim: false });
     f.render_widget(code_block, detail_chunks[1]);
 
     let freq_list = List::new(app.list_frequencies())
