@@ -1,4 +1,4 @@
-/// Runner for the moostar visualizer
+//! Runner for the moostar visualizer
 use std::collections::{HashMap, VecDeque};
 use std::iter::Peekable;
 use std::error::Error;
@@ -79,6 +79,9 @@ fn fetch_identifier(chars: &mut Peekable<std::str::Chars<'_>>) -> Result<(String
     Ok((identifier, eaten))
 }
 
+type SpannedInstruction = (MooInst, (usize, usize));
+type MethodIndex = HashMap<usize, usize>;
+
 pub struct Runner {
     /// Stack of iteration/call return pointers
     return_positions: VecDeque<usize>,
@@ -90,7 +93,7 @@ pub struct Runner {
     data_ribbon: HashMap<usize, u8>,
     meta_ribbon: HashMap<usize, u8>,
     /// Program
-    program: Vec<(MooInst, (usize, usize))>,
+    program: Vec<SpannedInstruction>,
     instruction_pointer: usize,
     halted: bool,
     /// Input
@@ -98,13 +101,13 @@ pub struct Runner {
     /// Output,
     output: String,
     /// Method management
-    method_index: HashMap<usize, usize>,
+    method_index: MethodIndex,
 }
 
 impl Runner {
     pub fn new(program: &str) -> Result<Self, Box<dyn Error>> {
         // Process
-        let (instr, method_index) = Runner::process(program)?;
+        let (instr, method_index) = Self::process(program)?;
         // Find the index of the first non-defining instruction
         let mut silencer: bool = true;
         let mut idx: usize = 0;
@@ -116,7 +119,7 @@ impl Runner {
                 _ => { if !silencer { idx = pos; break; } }
             }
         }
-        Ok(Runner {
+        Ok(Self {
             return_positions: VecDeque::new(),
             pointer: 0,
             meta_pointer: 0,
@@ -132,9 +135,9 @@ impl Runner {
         })
     }
 
-    fn process(program: &str) -> Result<(Vec<(MooInst, (usize, usize))>, HashMap<usize, usize>), Box<dyn Error>> {
+    fn process(program: &str) -> Result<(Vec<SpannedInstruction>, MethodIndex), Box<dyn Error>> {
         let mut method_lookup: HashMap<String, usize> = HashMap::new();
-        let mut method_index: HashMap<usize, usize> = HashMap::new();
+        let mut method_index: MethodIndex = HashMap::new();
         let mut program_out: Vec<(MooInst, (usize, usize))> = Vec::new();
         let mut method_fetcher = program.chars().peekable();
         let mut pos = 0;
@@ -225,7 +228,7 @@ impl Runner {
     pub fn jump_list(&self, max_of: Option<usize>) -> Vec<usize> {
         self.return_positions
             .iter()
-            .take(max_of.unwrap_or_else(|| self.return_positions.len()))
+            .take(max_of.unwrap_or(self.return_positions.len()))
             .copied()
             .collect::<Vec<usize>>()
     }
@@ -275,7 +278,7 @@ impl Runner {
         }
     }
 
-    pub fn step(&mut self) -> () {
+    pub fn step(&mut self) {
         loop {
             // Look at where we are
             let (instr, _) = self.next_instruction();
@@ -331,10 +334,8 @@ impl Runner {
                     // Move back to the opening of the loop
                     self.instruction_pointer = self.retrieve_pointer();
                 },
-                MooInst::Out => {
-                    panic!("NIY")
-                },
-                MooInst::In => {
+                MooInst::Out
+                | MooInst::In => {
                     panic!("NIY")
                 },
                 MooInst::Call(n) => {
@@ -367,14 +368,8 @@ impl Runner {
         }
 
         // Move forward as long as it's a Nop
-        loop {
-            match self.next_instruction().0 {
-                MooInst::Nop(_) => {
-                    self.instruction_pointer += 1;
-                    continue;
-                },
-                _ => { break; }
-            }
+        while let MooInst::Nop(_) = self.next_instruction().0 {
+            self.instruction_pointer += 1;
         }
     }
 

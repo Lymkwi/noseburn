@@ -1,3 +1,15 @@
+//! Main module
+// Make clippy quite nasty
+#![deny(clippy::complexity)]
+#![deny(clippy::correctness)]
+#![deny(clippy::style)]
+#![deny(clippy::pedantic)]
+#![deny(clippy::perf)]
+// Add some new clippy lints
+#![deny(clippy::use_self)]
+// Add some default lints
+#![deny(unused_variables)]
+
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
     execute,
@@ -15,30 +27,32 @@ use tui::{
     layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Span, Spans, Text},
-    widgets::{Block, BorderType, Borders, canvas::{Canvas, Line, Rectangle}, List, ListItem, ListState, Paragraph, Wrap},
+    widgets::{Block, BorderType, Borders, canvas::Canvas, List, ListItem, ListState, Paragraph, Wrap},
     Frame, Terminal
 };
 
 mod moostar;
 
+
 enum InputEditionMode {
     Normal,
-    Editing
+    //Editing
 }
 
 #[derive(Copy, Clone)]
+// In Hertz
 enum Frequency {
-    HalfHz,
-    OneHz,
-    TwoHz,
-    FiveHz,
-    TenHz,
-    TwentyHz,
-    FiftyHz,
-    HundredHz,
-    TwoHundredHz,
-    FiveHundredHz,
-    ThousandHz
+    Half,
+    One,
+    Two,
+    Five,
+    Ten,
+    Twenty,
+    Fifty,
+    Hundred,
+    TwoHundred,
+    FiveHundred,
+    Thousand
 }
 
 struct App {
@@ -57,25 +71,25 @@ struct App {
 }
 
 impl App {
-    fn new(path: &str) -> Result<App, Box<dyn Error>> {
+    fn new(path: &str) -> Result<Self, Box<dyn Error>> {
         let vecbytes: Vec<u8> = std::fs::read(path)?;
         let decoded: String = String::from_utf8(vecbytes)?;
-        Ok(App {
+        Ok(Self {
             runner: moostar::Runner::new(&decoded)?,
             code: decoded + " ", // That space serves for "halt"
             edition_mode: InputEditionMode::Normal,
-            frequency: Frequency::OneHz,
+            frequency: Frequency::One,
             running: false,
             funny_number: 0
         })
     }
 
-    fn step(&mut self) -> () {
+    fn step(&mut self) {
         self.runner.step();
     }
 
     fn get_input(&self) -> &str {
-        &self.runner.get_input()
+        self.runner.get_input()
     }
 
     fn get_code(&self) -> &str {
@@ -123,7 +137,7 @@ impl App {
         Text::from(spans)
     }
 
-    fn format_ribbon<'a>(&self) -> Span<'a> {
+    fn format_ribbon<'a>() -> Span<'a> {
         // So
         // What is the span we have in front of us?
         Span::styled(format!("|{}", (0..100).map(|x| format!(" {:03} ", x)).collect::<Vec<String>>().join("|")), Style::default())
@@ -137,37 +151,37 @@ impl App {
 
     fn decrease_frequency(&mut self) {
         self.frequency = match self.frequency {
-            Frequency::HalfHz => Frequency::HalfHz,
-            Frequency::OneHz => Frequency::HalfHz,
-            Frequency::TwoHz => Frequency::OneHz,
-            Frequency::FiveHz => Frequency::TwoHz,
-            Frequency::TenHz => Frequency::FiveHz,
-            Frequency::TwentyHz => Frequency::TenHz,
-            Frequency::FiftyHz => Frequency::TwentyHz,
-            Frequency::HundredHz => Frequency::FiftyHz,
-            Frequency::TwoHundredHz => Frequency::HundredHz,
-            Frequency::FiveHundredHz => Frequency::TwoHundredHz,
-            Frequency::ThousandHz => Frequency::FiveHundredHz
+            Frequency::Half
+            | Frequency::One => Frequency::Half,
+            Frequency::Two => Frequency::One,
+            Frequency::Five => Frequency::Two,
+            Frequency::Ten => Frequency::Five,
+            Frequency::Twenty => Frequency::Ten,
+            Frequency::Fifty => Frequency::Twenty,
+            Frequency::Hundred => Frequency::Fifty,
+            Frequency::TwoHundred => Frequency::Hundred,
+            Frequency::FiveHundred => Frequency::TwoHundred,
+            Frequency::Thousand => Frequency::FiveHundred
         }
     }
 
     fn increase_frequency(&mut self) {
         self.frequency = match self.frequency {
-            Frequency::HalfHz => Frequency::OneHz,
-            Frequency::OneHz => Frequency::TwoHz,
-            Frequency::TwoHz => Frequency::FiveHz,
-            Frequency::FiveHz => Frequency::TenHz,
-            Frequency::TenHz => Frequency::TwentyHz,
-            Frequency::TwentyHz => Frequency::FiftyHz,
-            Frequency::FiftyHz => Frequency::HundredHz,
-            Frequency::HundredHz => Frequency::TwoHundredHz,
-            Frequency::TwoHundredHz => Frequency::FiveHundredHz,
-            Frequency::FiveHundredHz => Frequency::ThousandHz,
-            Frequency::ThousandHz => Frequency::ThousandHz
+            Frequency::Half => Frequency::One,
+            Frequency::One => Frequency::Two,
+            Frequency::Two => Frequency::Five,
+            Frequency::Five => Frequency::Ten,
+            Frequency::Ten => Frequency::Twenty,
+            Frequency::Twenty => Frequency::Fifty,
+            Frequency::Fifty => Frequency::Hundred,
+            Frequency::Hundred => Frequency::TwoHundred,
+            Frequency::TwoHundred => Frequency::FiveHundred,
+            Frequency::FiveHundred
+            | Frequency::Thousand => Frequency::Thousand
         }
     }
 
-    fn list_frequencies(&self) -> Vec<ListItem> {
+    fn list_frequencies<'i>() -> Vec<ListItem<'i>> {
         vec![
             ListItem::new("1/2 Hz"),
             ListItem::new("1 Hz"), ListItem::new("2 Hz"), ListItem::new("5 Hz"),
@@ -180,17 +194,17 @@ impl App {
     fn get_delay(&self) -> Duration {
         Duration::from_millis(
             match self.frequency {
-                Frequency::HalfHz => 2000,
-                Frequency::OneHz => 1000,
-                Frequency::TwoHz => 500,
-                Frequency::FiveHz => 200,
-                Frequency::TenHz => 100,
-                Frequency::TwentyHz => 50,
-                Frequency::FiftyHz => 20,
-                Frequency::HundredHz => 10,
-                Frequency::TwoHundredHz => 5,
-                Frequency::FiveHundredHz => 2,
-                Frequency::ThousandHz => 1
+                Frequency::Half => 2000,
+                Frequency::One => 1000,
+                Frequency::Two => 500,
+                Frequency::Five => 200,
+                Frequency::Ten => 100,
+                Frequency::Twenty => 50,
+                Frequency::Fifty => 20,
+                Frequency::Hundred => 10,
+                Frequency::TwoHundred => 5,
+                Frequency::FiveHundred => 2,
+                Frequency::Thousand => 1
             }
         )
     }
@@ -227,7 +241,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     disable_terminal(terminal)?;
 
     if let Err(err) = res {
-        eprintln!("Shoot!\n{:?}", err)
+        eprintln!("Shoot!\n{:?}", err);
     }
 
     Ok(())
@@ -263,11 +277,11 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
             // Compute how many ticks must be done at once
             let num_of_ticks: u128 = elapsed.div_euclid(delay);
             let rem: u128 = elapsed % delay;
-            last_tick = Instant::now() - Duration::from_millis(rem as u64);
+            // Not extremely safe, could shit the bed if there was ***extreme*** lag
+            last_tick = Instant::now() - Duration::from_millis(rem.try_into().unwrap());
             // Do the ticks
             if app.running {
                 (0..num_of_ticks).for_each(|_| app.step());
-                app.funny_number = app.funny_number.wrapping_add(num_of_ticks as u16);    
             }
         }
     }
@@ -299,7 +313,7 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
             .title(Span::styled("Ribbons", Style::default().fg(Color::Red).add_modifier(Modifier::ITALIC)))
             .title_alignment(Alignment::Right))
         .paint(|ctx| {
-            let spanned: Span = app.format_ribbon();
+            let spanned: Span = App::format_ribbon();
             ctx.print(0.0, 100.0, spanned);
         })
         .x_bounds([0.0, 100.0])
@@ -338,7 +352,7 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
         .wrap(Wrap { trim: false });
     f.render_widget(code_block, detail_chunks[1]);
 
-    let freq_list = List::new(app.list_frequencies())
+    let freq_list = List::new(App::list_frequencies())
         .block(Block::default().title(":[Frequency]:").title_alignment(Alignment::Center).borders(Borders::ALL))
         .style(Style::default())
         .highlight_style(Style::default().add_modifier(Modifier::BOLD))
