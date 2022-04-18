@@ -229,6 +229,15 @@ impl Runner {
         &self.output
     }
 
+    pub fn get_data_pointer(&self) -> usize {
+        self.pointer
+    }
+
+    pub fn get_ribbon_around(&self, count: usize) -> Vec<u8> {
+        (self.pointer.div_euclid(count)*count .. (self.pointer.div_euclid(count)+1)*count)
+            .map(|x| self.data_ribbon.get(&x).unwrap_or(&0)).copied().collect::<Vec<u8>>()
+    }
+
     pub fn jump_list(&self, max_of: Option<usize>) -> Vec<usize> {
         self.return_positions
             .iter()

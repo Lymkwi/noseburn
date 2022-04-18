@@ -27,7 +27,7 @@ use tui::{
     layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Span, Spans, Text},
-    widgets::{Block, BorderType, Borders, canvas::Canvas, List, ListItem, ListState, Paragraph, Wrap},
+    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Wrap},
     Frame, Terminal
 };
 
@@ -149,10 +149,8 @@ impl App {
         (Text::from(spans), center_line)
     }
 
-    fn format_ribbon<'a>() -> Span<'a> {
-        // So
-        // What is the span we have in front of us?
-        Span::styled(format!("|{}", (0..100).map(|x| format!(" {:03} ", x)).collect::<Vec<String>>().join("|")), Style::default())
+    fn get_ribbon(&self, count: usize) -> (Vec<u8>, usize) {
+        (self.runner.get_ribbon_around(count), self.runner.get_data_pointer())
     }
 
     fn get_freq_list_state(&self) -> ListState {
@@ -330,18 +328,19 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
         .constraints([Constraint::Percentage(50), Constraint::Length(3), Constraint::Min(10), Constraint::Length(3)].as_ref())
         .split(f.size());
 
-    let canvas_block = Canvas::default()
-        .block(Block::default()
-            .borders(Borders::ALL)
-            .title(Span::styled("Ribbons", Style::default().fg(Color::Red).add_modifier(Modifier::ITALIC)))
-            .title_alignment(Alignment::Right))
-        .paint(|ctx| {
-            let spanned: Span = App::format_ribbon();
-            ctx.print(0.0, 100.0, spanned);
-        })
-        .x_bounds([0.0, 100.0])
-        .y_bounds([0.0, 100.0]);
-    f.render_widget(canvas_block, chunks[0]);
+    let cell_count = (chunks[0].width-2)/6;
+    let (rdata, position) = app.get_ribbon(cell_count.into());
+    let mut ribbon_spans: Vec<Span<'_>> = rdata.iter().map(|x| Span::raw(format!(" {:03} |", x))).collect::<Vec<Span>>();
+    ribbon_spans.insert(0, Span::raw("|"));
+    let ribbon_block = Paragraph::new(Text::from(vec![
+            Spans::from(ribbon_spans),
+            Spans::from((0..cell_count)
+                   .map(|x| if usize::from(x) == position%usize::from(cell_count) { "   ^  " } else { "      " })
+                   .map(Span::raw)
+                   .collect::<Vec<Span>>())]))
+        .block(Block::default().title("Ribbons").borders(Borders::ALL))
+        .alignment(Alignment::Center);
+    f.render_widget(ribbon_block, chunks[0]);
 
     let io_layout = Layout::default()
         .direction(Direction::Horizontal)
@@ -383,8 +382,8 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
 
     let (text, center_line) = app.get_coloured_code(detail_chunks[1].width - 2);
     let center_line: u16 = center_line.try_into().unwrap();
-    let linecount: u16 = app.get_wrapped_code_line_count(detail_chunks[1].width - 2).try_into().unwrap();
-    let scroll = center_line.checked_sub((detail_chunks[1].height-2)/2).unwrap_or(0).min(linecount.checked_sub(detail_chunks[1].height-2).unwrap_or(0));
+    let linecount: u16 = app.get_wrapped_code_line_count(detail_chunks[1].width - 2);
+    let scroll = center_line.saturating_sub((detail_chunks[1].height-2)/2).min(linecount.saturating_sub(detail_chunks[1].height-2));
     let code_block = Paragraph::new(text)
         .block(Block::default()
             .borders(Borders::ALL)
