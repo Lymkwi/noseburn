@@ -83,6 +83,11 @@ impl App {
         })
     }
 
+    fn reset(&mut self) {
+        self.runner.reset();
+        self.running = false;
+    }
+
     fn step(&mut self) {
         self.runner.step();
     }
@@ -285,7 +290,8 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
                     KeyCode::Up => app.decrease_frequency(),
                     KeyCode::Down => app.increase_frequency(),
                     KeyCode::Char(' ') => app.running = !app.running,
-                    KeyCode::Char('s') => { app.running = false; app.step(); }
+                    KeyCode::Char('s') => { app.running = false; app.step(); },
+                    KeyCode::Char('r') => { app.reset(); },
                     _ => {}
                 }
             }
@@ -402,7 +408,7 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
     state.select(Some(0));
     f.render_stateful_widget(freq_list, detail_chunks[2], &mut app.get_freq_list_state());
 
-    let help_block = Paragraph::new(format!("Q: Quit    S: Step    Space: {}\nUp: Lower Frequency    Down: Increase Frequency", if app.running { "Pause"  } else { "Start" }))
+    let help_block = Paragraph::new(format!("Q: Quit    S: Step    Space: {}    R: Reset\nUp: Lower Frequency    Down: Increase Frequency", if app.running { "Pause"  } else { "Start" }))
         .block(Block::default()
             .borders(Borders::TOP)
             .title(Span::styled("Keys", Style::default().fg(Color::Red).add_modifier(Modifier::ITALIC)))

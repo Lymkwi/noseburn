@@ -135,6 +135,29 @@ impl Runner {
         })
     }
 
+    pub fn reset(&mut self) {
+        self.return_positions = VecDeque::new();
+        self.pointer = 0;
+        self.meta_pointer = 0;
+        self.is_meta = false;
+        self.halted = false;
+        self.data_ribbon = HashMap::new();
+        self.meta_ribbon = HashMap::new();
+        let mut silencer: bool = true;
+        let mut idx: usize = 0;
+        for (pos, inst) in self.program.iter().enumerate() {
+            match inst.0 {
+                MooInst::FuncStart(_) => { silencer = true; }
+                MooInst::FuncEnd(_) => { silencer = false; },
+                MooInst::Nop(_) => {},
+                _ => { if !silencer { idx = pos; break; } }
+            }
+        }
+        self.instruction_pointer = idx;
+        self.input = String::new();
+        self.output = String::new();
+    }
+
     fn process(program: &str) -> Result<(Vec<SpannedInstruction>, MethodIndex), Box<dyn Error>> {
         let mut method_lookup: HashMap<String, usize> = HashMap::new();
         let mut method_index: MethodIndex = HashMap::new();
