@@ -13,13 +13,13 @@
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 
 use std::{
     error::Error,
     io,
-    time::{Duration, Instant}
+    time::{Duration, Instant},
 };
 
 use tui::{
@@ -28,7 +28,7 @@ use tui::{
     style::{Color, Modifier, Style},
     text::{Span, Spans, Text},
     widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Wrap},
-    Frame, Terminal
+    Frame, Terminal,
 };
 
 mod moostar;
@@ -51,7 +51,7 @@ enum Frequency {
     Hundred,
     TwoHundred,
     FiveHundred,
-    Thousand
+    Thousand,
 }
 
 struct App {
@@ -66,7 +66,7 @@ struct App {
     /// Running
     running: bool,
     /// Debug
-    funny_number: u16
+    funny_number: u16,
 }
 
 impl App {
@@ -79,7 +79,7 @@ impl App {
             edition_mode: InputEditionMode::Normal,
             frequency: Frequency::One,
             running: false,
-            funny_number: 0
+            funny_number: 0,
         })
     }
 
@@ -112,11 +112,13 @@ impl App {
             self.runner
                 .jump_list(max_of)
                 .iter()
-                .map(|pos| Spans::from(vec![
-                    Span::raw("Back to #"),
-                    Span::styled(pos.to_string(), style)
-                ]))
-                .collect::<Vec<Spans>>()
+                .map(|pos| {
+                    Spans::from(vec![
+                        Span::raw("Back to #"),
+                        Span::styled(pos.to_string(), style),
+                    ])
+                })
+                .collect::<Vec<Spans>>(),
         )
     }
 
@@ -136,7 +138,9 @@ impl App {
                 // Change the wrap offset
                 center_line += if len > wrap_length {
                     len.div_euclid(wrap_length) + if len % wrap_length == 0 { 0 } else { 1 }
-                } else { 0 };
+                } else {
+                    0
+                };
                 colour_span.0 -= line.len() + 1;
                 spans.push(Spans::from(vec![Span::raw(line)]));
             } else if split_reached || self.runner.is_halted() {
@@ -144,10 +148,19 @@ impl App {
             } else {
                 //Split into parts
                 // This is the line
-                center_line += current_line + if colour_span.0 > wrap_length { colour_span.0.div_euclid(wrap_length) } else { 0 };
+                center_line += current_line
+                    + if colour_span.0 > wrap_length {
+                        colour_span.0.div_euclid(wrap_length)
+                    } else {
+                        0
+                    };
                 let (one, bet) = line.split_at(colour_span.0);
                 let (two, three) = bet.split_at(colour_span.1);
-                spans.push(Spans::from(vec![Span::raw(one), Span::styled(two, highlight_style), Span::raw(three)]));
+                spans.push(Spans::from(vec![
+                    Span::raw(one),
+                    Span::styled(two, highlight_style),
+                    Span::raw(three),
+                ]));
                 split_reached = true;
             }
         }
@@ -155,7 +168,10 @@ impl App {
     }
 
     fn get_ribbon(&self, count: usize) -> (Vec<u8>, usize) {
-        (self.runner.get_ribbon_around(count), self.runner.get_data_pointer())
+        (
+            self.runner.get_ribbon_around(count),
+            self.runner.get_data_pointer(),
+        )
     }
 
     fn get_freq_list_state(&self) -> ListState {
@@ -166,8 +182,7 @@ impl App {
 
     fn decrease_frequency(&mut self) {
         self.frequency = match self.frequency {
-            Frequency::Half
-            | Frequency::One => Frequency::Half,
+            Frequency::Half | Frequency::One => Frequency::Half,
             Frequency::Two => Frequency::One,
             Frequency::Five => Frequency::Two,
             Frequency::Ten => Frequency::Five,
@@ -176,7 +191,7 @@ impl App {
             Frequency::Hundred => Frequency::Fifty,
             Frequency::TwoHundred => Frequency::Hundred,
             Frequency::FiveHundred => Frequency::TwoHundred,
-            Frequency::Thousand => Frequency::FiveHundred
+            Frequency::Thousand => Frequency::FiveHundred,
         }
     }
 
@@ -191,37 +206,40 @@ impl App {
             Frequency::Fifty => Frequency::Hundred,
             Frequency::Hundred => Frequency::TwoHundred,
             Frequency::TwoHundred => Frequency::FiveHundred,
-            Frequency::FiveHundred
-            | Frequency::Thousand => Frequency::Thousand
+            Frequency::FiveHundred | Frequency::Thousand => Frequency::Thousand,
         }
     }
 
     fn list_frequencies<'i>() -> Vec<ListItem<'i>> {
         vec![
             ListItem::new("1/2 Hz"),
-            ListItem::new("1 Hz"), ListItem::new("2 Hz"), ListItem::new("5 Hz"),
-            ListItem::new("10 Hz"), ListItem::new("20 Hz"), ListItem::new("50 Hz"),
-            ListItem::new("100 Hz"), ListItem::new("200 Hz"), ListItem::new("500 Hz"),
-            ListItem::new("1000 Hz")
+            ListItem::new("1 Hz"),
+            ListItem::new("2 Hz"),
+            ListItem::new("5 Hz"),
+            ListItem::new("10 Hz"),
+            ListItem::new("20 Hz"),
+            ListItem::new("50 Hz"),
+            ListItem::new("100 Hz"),
+            ListItem::new("200 Hz"),
+            ListItem::new("500 Hz"),
+            ListItem::new("1000 Hz"),
         ]
     }
 
     fn get_delay(&self) -> Duration {
-        Duration::from_millis(
-            match self.frequency {
-                Frequency::Half => 2000,
-                Frequency::One => 1000,
-                Frequency::Two => 500,
-                Frequency::Five => 200,
-                Frequency::Ten => 100,
-                Frequency::Twenty => 50,
-                Frequency::Fifty => 20,
-                Frequency::Hundred => 10,
-                Frequency::TwoHundred => 5,
-                Frequency::FiveHundred => 2,
-                Frequency::Thousand => 1
-            }
-        )
+        Duration::from_millis(match self.frequency {
+            Frequency::Half => 2000,
+            Frequency::One => 1000,
+            Frequency::Two => 500,
+            Frequency::Five => 200,
+            Frequency::Ten => 100,
+            Frequency::Twenty => 50,
+            Frequency::Fifty => 20,
+            Frequency::Hundred => 10,
+            Frequency::TwoHundred => 5,
+            Frequency::FiveHundred => 2,
+            Frequency::Thousand => 1,
+        })
     }
 
     fn get_wrapped_code_line_count(&self, size: u16) -> u16 {
@@ -229,7 +247,9 @@ impl App {
         for line in self.code.lines() {
             let len = line.len();
             let rem = len.rem_euclid(size.into());
-            let add: u16 = (len.div_euclid(size.into()) + if rem > 0 { 1 } else { 0 }).try_into().unwrap();
+            let add: u16 = (len.div_euclid(size.into()) + if rem > 0 { 1 } else { 0 })
+                .try_into()
+                .unwrap();
             count += add;
         }
         count
@@ -244,9 +264,15 @@ fn init_terminal() -> Result<Terminal<CrosstermBackend<std::io::Stdout>>, Box<dy
     Ok(Terminal::new(backend)?)
 }
 
-fn disable_terminal<B: Backend + std::io::Write>(mut terminal: Terminal<B>) -> Result<(), Box<dyn Error>> {
+fn disable_terminal<B: Backend + std::io::Write>(
+    mut terminal: Terminal<B>,
+) -> Result<(), Box<dyn Error>> {
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
     terminal.show_cursor()?;
     Ok(())
 }
@@ -279,7 +305,8 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
         terminal.draw(|f| ui(f, &app))?;
 
         // Find the tick rate from app
-        let timeout = app.get_delay()
+        let timeout = app
+            .get_delay()
             .checked_sub(last_tick.elapsed())
             .unwrap_or_else(|| Duration::from_millis(0));
         // Use all of that remaining time to try and fetch a key event
@@ -290,8 +317,13 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
                     KeyCode::Up => app.decrease_frequency(),
                     KeyCode::Down => app.increase_frequency(),
                     KeyCode::Char(' ') => app.running = !app.running,
-                    KeyCode::Char('s') => { app.running = false; app.step(); },
-                    KeyCode::Char('r') => { app.reset(); },
+                    KeyCode::Char('s') => {
+                        app.running = false;
+                        app.step();
+                    }
+                    KeyCode::Char('r') => {
+                        app.reset();
+                    }
                     _ => {}
                 }
             }
@@ -331,21 +363,41 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
-        .constraints([Constraint::Percentage(50), Constraint::Length(3), Constraint::Min(10), Constraint::Length(3)].as_ref())
+        .constraints(
+            [
+                Constraint::Percentage(50),
+                Constraint::Length(3),
+                Constraint::Min(10),
+                Constraint::Length(3),
+            ]
+            .as_ref(),
+        )
         .split(f.size());
 
-    let cell_count = (chunks[0].width-2)/6;
+    let cell_count = (chunks[0].width - 2) / 6;
     let (rdata, position) = app.get_ribbon(cell_count.into());
-    let mut ribbon_spans: Vec<Span<'_>> = rdata.iter().map(|x| Span::raw(format!(" {:03} |", x))).collect::<Vec<Span>>();
+    let mut ribbon_spans: Vec<Span<'_>> = rdata
+        .iter()
+        .map(|x| Span::raw(format!(" {:03} |", x)))
+        .collect::<Vec<Span>>();
     ribbon_spans.insert(0, Span::raw("|"));
     let ribbon_block = Paragraph::new(Text::from(vec![
-            Spans::from(ribbon_spans),
-            Spans::from((0..cell_count)
-                   .map(|x| if usize::from(x) == position%usize::from(cell_count) { "   ^  " } else { "      " })
-                   .map(Span::raw)
-                   .collect::<Vec<Span>>())]))
-        .block(Block::default().title("Ribbons").borders(Borders::ALL))
-        .alignment(Alignment::Center);
+        Spans::from(ribbon_spans),
+        Spans::from(
+            (0..cell_count)
+                .map(|x| {
+                    if usize::from(x) == position % usize::from(cell_count) {
+                        "   ^  "
+                    } else {
+                        "      "
+                    }
+                })
+                .map(Span::raw)
+                .collect::<Vec<Span>>(),
+        ),
+    ]))
+    .block(Block::default().title("Ribbons").borders(Borders::ALL))
+    .alignment(Alignment::Center);
     f.render_widget(ribbon_block, chunks[0]);
 
     let io_layout = Layout::default()
@@ -353,54 +405,94 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(chunks[1]);
     let input_block = Paragraph::new(app.get_input())
-        .block(Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::reset())
-            .title(Span::styled("Input", Style::default().fg(Color::Red).add_modifier(Modifier::ITALIC)))
-            .title_alignment(Alignment::Right)
-            .border_type(BorderType::Plain))
-        .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::reset())
+                .title(Span::styled(
+                    "Input",
+                    Style::default()
+                        .fg(Color::Red)
+                        .add_modifier(Modifier::ITALIC),
+                ))
+                .title_alignment(Alignment::Right)
+                .border_type(BorderType::Plain),
+        )
+        .style(
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )
         .alignment(Alignment::Left);
     f.render_widget(input_block, io_layout[0]);
 
     let output_block = Paragraph::new(app.get_output())
-        .block(Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::reset())
-            .title(Span::styled("Output", Style::default().fg(Color::Red).add_modifier(Modifier::ITALIC)))
-            .title_alignment(Alignment::Right))
-        .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::reset())
+                .title(Span::styled(
+                    "Output",
+                    Style::default()
+                        .fg(Color::Red)
+                        .add_modifier(Modifier::ITALIC),
+                ))
+                .title_alignment(Alignment::Right),
+        )
+        .style(
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )
         .alignment(Alignment::Left);
     f.render_widget(output_block, io_layout[1]);
 
     let detail_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .margin(0)
-        .constraints([Constraint::Percentage(30), Constraint::Percentage(50), Constraint::Percentage(20)].as_ref())
+        .constraints(
+            [
+                Constraint::Percentage(30),
+                Constraint::Percentage(50),
+                Constraint::Percentage(20),
+            ]
+            .as_ref(),
+        )
         .split(chunks[2]);
 
-    let jump_block = Paragraph::new(app.get_jumps(Some((detail_chunks[0].height-2).into())))
-        .block(Block::default()
-            .borders(Borders::ALL)
-            .title("-::[Jumps]::-")
-            .title_alignment(Alignment::Center));
+    let jump_block = Paragraph::new(app.get_jumps(Some((detail_chunks[0].height - 2).into())))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("-::[Jumps]::-")
+                .title_alignment(Alignment::Center),
+        );
     f.render_widget(jump_block, detail_chunks[0]);
 
     let (text, center_line) = app.get_coloured_code(detail_chunks[1].width - 2);
     let center_line: u16 = center_line.try_into().unwrap();
     let linecount: u16 = app.get_wrapped_code_line_count(detail_chunks[1].width - 2);
-    let scroll = center_line.saturating_sub((detail_chunks[1].height-2)/2).min(linecount.saturating_sub(detail_chunks[1].height-2));
+    let scroll = center_line
+        .saturating_sub((detail_chunks[1].height - 2) / 2)
+        .min(linecount.saturating_sub(detail_chunks[1].height - 2));
     let code_block = Paragraph::new(text)
-        .block(Block::default()
-            .borders(Borders::ALL)
-            .title("-::[Code]::-")
-            .title_alignment(Alignment::Center))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("-::[Code]::-")
+                .title_alignment(Alignment::Center),
+        )
         .scroll((scroll, 0))
         .wrap(Wrap { trim: false });
     f.render_widget(code_block, detail_chunks[1]);
 
     let freq_list = List::new(App::list_frequencies())
-        .block(Block::default().title(":[Frequency]:").title_alignment(Alignment::Center).borders(Borders::ALL))
+        .block(
+            Block::default()
+                .title(":[Frequency]:")
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL),
+        )
         .style(Style::default())
         .highlight_style(Style::default().add_modifier(Modifier::BOLD))
         .highlight_symbol(">");
