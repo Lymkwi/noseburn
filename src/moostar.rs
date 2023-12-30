@@ -3,6 +3,8 @@ use std::collections::{HashMap, VecDeque};
 use std::error::Error;
 use std::iter::Peekable;
 
+use unicode_segmentation::UnicodeSegmentation;
+
 #[derive(Debug, Clone)]
 pub struct MooError {
     message: String,
@@ -303,6 +305,10 @@ impl Runner {
 
     pub fn get_output(&self) -> &str {
         &self.output
+    }
+
+    pub fn get_output_length(&self) -> usize {
+        UnicodeSegmentation::graphemes(self.output.as_str(), true).count()
     }
 
     pub fn get_data_pointer(&self) -> usize {

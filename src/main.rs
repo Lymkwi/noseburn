@@ -100,6 +100,10 @@ impl App {
         self.runner.get_output()
     }
 
+    fn get_output_length(&self) -> usize {
+        self.runner.get_output_length()
+    }
+
     fn get_code(&self) -> &str {
         &self.code
     }
@@ -375,7 +379,10 @@ fn ui_io<B: Backend>(f: &mut Frame<B>, app: &App, chunks: &[Rect]) {
         .alignment(Alignment::Left);
     f.render_widget(input_block, io_layout[0]);
 
-    let output_block = Paragraph::new(app.get_output())
+    let out = app.get_output();
+    let outlen: u16 = u16::try_from(app.get_output_length()).expect("Output overflowed u16");
+    let outscroll: u16 = outlen.saturating_sub(io_layout[1].width);
+    let output_block = Paragraph::new(out)
         .block(
             Block::default()
                 .borders(Borders::ALL)
@@ -393,6 +400,7 @@ fn ui_io<B: Backend>(f: &mut Frame<B>, app: &App, chunks: &[Rect]) {
                 .fg(Color::Yellow)
                 .add_modifier(Modifier::BOLD),
         )
+        .scroll((0, outscroll))
         .alignment(Alignment::Left);
     f.render_widget(output_block, io_layout[1]);
 }
