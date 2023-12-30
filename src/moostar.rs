@@ -233,19 +233,17 @@ impl Runner {
                     for guard in [')', ':', '{'] {
                         if method_fetcher.next() != Some(guard) {
                             return Err(Box::new(MooError::new(&format!(
-                                "Expected '{}' after function declaration header",
-                                guard
+                                "Expected '{guard}' after function declaration header"
                             ))));
                         }
                     }
 
                     // Do we know about the function ?
-                    let function_code = match method_lookup.get(&ident) {
-                        Some(&c) => c,
-                        None => {
-                            method_lookup.insert(ident, method_lookup.len());
-                            method_lookup.len() - 1
-                        }
+                    let function_code = if let Some(&c) = method_lookup.get(&ident) {
+                        c
+                    } else {
+                        method_lookup.insert(ident, method_lookup.len());
+                        method_lookup.len() - 1
                     };
                     // Insert a code
                     method_index.insert(function_code, program_out.len());
@@ -273,13 +271,12 @@ impl Runner {
                         )));
                     }
                     // Get the identifier
-                    let method_code = match method_lookup.get(&ident) {
-                        Some(&c) => c,
-                        None => {
-                            let n = method_lookup.len();
-                            method_lookup.insert(ident, n);
-                            n
-                        }
+                    let method_code = if let Some(&c) = method_lookup.get(&ident) {
+                        c
+                    } else {
+                        let n = method_lookup.len();
+                        method_lookup.insert(ident, n);
+                        n
                     };
                     // Insert the call
                     program_out.push((MooInst::Call(method_code), (pos, eaten + 2)));

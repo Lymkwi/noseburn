@@ -24,7 +24,7 @@ use std::{
 
 use tui::{
     backend::{Backend, CrosstermBackend},
-    layout::{Alignment, Constraint, Direction, Layout},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Span, Spans, Text},
     widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Wrap},
@@ -137,7 +137,7 @@ impl App {
             if colour_span.0 > len {
                 // Change the wrap offset
                 center_line += if len > wrap_length {
-                    len.div_euclid(wrap_length) + if len % wrap_length == 0 { 0 } else { 1 }
+                    len.div_euclid(wrap_length) + usize::from(len % wrap_length == 0)
                 } else {
                     0
                 };
@@ -247,7 +247,7 @@ impl App {
         for line in self.code.lines() {
             let len = line.len();
             let rem = len.rem_euclid(size.into());
-            let add: u16 = (len.div_euclid(size.into()) + if rem > 0 { 1 } else { 0 })
+            let add: u16 = (len.div_euclid(size.into()) + usize::from(rem > 0))
                 .try_into()
                 .unwrap();
             count += add;
@@ -293,7 +293,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     disable_terminal(terminal)?;
 
     if let Err(err) = res {
-        eprintln!("Shoot!\n{:?}", err);
+        eprintln!("Shoot!\n{err:?}");
     }
 
     Ok(())
@@ -337,7 +337,9 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
             let num_of_ticks: u128 = elapsed.div_euclid(delay);
             let rem: u128 = elapsed % delay;
             // Not extremely safe, could shit the bed if there was ***extreme*** lag
-            last_tick = Instant::now() - Duration::from_millis(rem.try_into().unwrap());
+            last_tick = Instant::now()
+                .checked_sub(Duration::from_millis(rem.try_into().unwrap()))
+                .unwrap_or_else(Instant::now);
             // Do the ticks
             if app.running {
                 (0..num_of_ticks).for_each(|_| app.step());
@@ -346,60 +348,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
     }
 }
 
-fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
-    // Wrapping block for a group
-    // Just draw the block and the group on the same area and build the group
-    // with at least a margin of 1
-    let size = f.size();
-
-    // Suddounding block
-    let block = Block::default()
-        .borders(Borders::TOP)
-        .title("Nose Burn 👃🔥")
-        .title_alignment(Alignment::Center)
-        .border_type(BorderType::Thick);
-    f.render_widget(block, size);
-
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(1)
-        .constraints(
-            [
-                Constraint::Percentage(50),
-                Constraint::Length(3),
-                Constraint::Min(10),
-                Constraint::Length(3),
-            ]
-            .as_ref(),
-        )
-        .split(f.size());
-
-    let cell_count = (chunks[0].width - 2) / 6;
-    let (rdata, position) = app.get_ribbon(cell_count.into());
-    let mut ribbon_spans: Vec<Span<'_>> = rdata
-        .iter()
-        .map(|x| Span::raw(format!(" {:03} |", x)))
-        .collect::<Vec<Span>>();
-    ribbon_spans.insert(0, Span::raw("|"));
-    let ribbon_block = Paragraph::new(Text::from(vec![
-        Spans::from(ribbon_spans),
-        Spans::from(
-            (0..cell_count)
-                .map(|x| {
-                    if usize::from(x) == position % usize::from(cell_count) {
-                        "   ^  "
-                    } else {
-                        "      "
-                    }
-                })
-                .map(Span::raw)
-                .collect::<Vec<Span>>(),
-        ),
-    ]))
-    .block(Block::default().title("Ribbons").borders(Borders::ALL))
-    .alignment(Alignment::Center);
-    f.render_widget(ribbon_block, chunks[0]);
-
+fn ui_io<B: Backend>(f: &mut Frame<B>, app: &App, chunks: &[Rect]) {
     let io_layout = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
@@ -446,7 +395,9 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
         )
         .alignment(Alignment::Left);
     f.render_widget(output_block, io_layout[1]);
+}
 
+fn ui_details<B: Backend>(f: &mut Frame<B>, app: &App, chunks: &[Rect]) {
     let detail_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .margin(0)
@@ -499,6 +450,65 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
     let mut state: ListState = ListState::default();
     state.select(Some(0));
     f.render_stateful_widget(freq_list, detail_chunks[2], &mut app.get_freq_list_state());
+}
+
+fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
+    // Wrapping block for a group
+    // Just draw the block and the group on the same area and build the group
+    // with at least a margin of 1
+    let size = f.size();
+
+    // Suddounding block
+    let block = Block::default()
+        .borders(Borders::TOP)
+        .title("Nose Burn 👃🔥")
+        .title_alignment(Alignment::Center)
+        .border_type(BorderType::Thick);
+    f.render_widget(block, size);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(1)
+        .constraints(
+            [
+                Constraint::Percentage(50),
+                Constraint::Length(3),
+                Constraint::Min(10),
+                Constraint::Length(3),
+            ]
+            .as_ref(),
+        )
+        .split(f.size());
+
+    let cell_count = (chunks[0].width - 2) / 6;
+    let (rdata, position) = app.get_ribbon(cell_count.into());
+    let mut ribbon_spans: Vec<Span<'_>> = rdata
+        .iter()
+        .map(|x| Span::raw(format!(" {x:03} |")))
+        .collect::<Vec<Span>>();
+    ribbon_spans.insert(0, Span::raw("|"));
+    let ribbon_block = Paragraph::new(Text::from(vec![
+        Spans::from(ribbon_spans),
+        Spans::from(
+            (0..cell_count)
+                .map(|x| {
+                    if usize::from(x) == position % usize::from(cell_count) {
+                        "   ^  "
+                    } else {
+                        "      "
+                    }
+                })
+                .map(Span::raw)
+                .collect::<Vec<Span>>(),
+        ),
+    ]))
+    .block(Block::default().title("Ribbons").borders(Borders::ALL))
+    .alignment(Alignment::Center);
+    f.render_widget(ribbon_block, chunks[0]);
+
+    ui_io(f, app, &chunks);
+
+    ui_details(f, app, &chunks);
 
     let help_block = Paragraph::new(format!("Q: Quit    S: Step    Space: {}    R: Reset\nUp: Lower Frequency    Down: Increase Frequency", if app.running { "Pause"  } else { "Start" }))
         .block(Block::default()
