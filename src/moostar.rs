@@ -459,11 +459,28 @@ impl Runner {
                 MooInst::CloseLoop => {
                     // Move back to the opening of the loop
                     self.instruction_pointer = self.retrieve_pointer();
-                },
-                MooInst::Out
-                | MooInst::In => {
-                    panic!("NIY")
-                },
+                }
+                MooInst::Out => {
+                    // Get the current value under the cursor
+                    let val = self.get_value();
+                    let chr = char::from(val);
+                    self.output.push(chr);
+                    self.instruction_pointer += 1;
+                }
+                MooInst::In => {
+                    /*
+                    match self.input.as_bytes().first() {
+                        Some(c) => {
+                            // Get the char value
+                            self.set_value(*c);
+                        }
+                        None => {
+                            // Find a way to paralyze running
+                            self.halted = true;
+                        }
+                    }
+                    */
+                }
                 MooInst::Call(n) => {
                     // Find the function position
                     let position = *self.method_index.get(n).unwrap();
